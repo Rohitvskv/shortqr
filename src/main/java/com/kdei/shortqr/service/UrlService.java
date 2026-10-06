@@ -3,7 +3,11 @@ package com.kdei.shortqr.service;
 import com.kdei.shortqr.dto.UrlRequest;
 import com.kdei.shortqr.dto.UrlResponse;
 import com.kdei.shortqr.entity.URL;
+import com.kdei.shortqr.exception.DuplicateShortCodeException;
+import com.kdei.shortqr.exception.ShortUrlExpiredException;
+import com.kdei.shortqr.exception.ShortUrlNotFoundException;
 import com.kdei.shortqr.repository.UrlRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +26,9 @@ public class UrlService {
 
     private final SecureRandom random = new SecureRandom();
 
+    @Value("${app.base-url}")
+    private String baseUrl;
+
     public UrlService(UrlRepository urlRepository) {
         this.urlRepository = urlRepository;
     }
@@ -37,7 +44,9 @@ public class UrlService {
             shortCode = request.customAlias().trim();
 
             if (urlRepository.existsByShortCode(shortCode)) {
-                throw new RuntimeException("Short code already exists");
+                throw new DuplicateShortCodeException(
+                        "Short code already exists"
+                );
             }
 
         } else {
@@ -59,17 +68,19 @@ public class UrlService {
 
         URL url = urlRepository.findByShortCode(shortCode)
                 .orElseThrow(() ->
-                        new RuntimeException("Short URL not found"));
+                        new ShortUrlNotFoundException(
+                                "Short URL not found"
+                        ));
 
         if (url.getExpiresAt() != null &&
                 url.getExpiresAt().isBefore(LocalDateTime.now())) {
 
-            throw new RuntimeException("Short URL has expired");
+            throw new ShortUrlExpiredException(
+                    "Short URL has expired"
+            );
         }
 
-        url.setClickCount(url.getClickCount() + 1);
-
-        urlRepository.save(url);
+        urlRepository.incrementClickCount(shortCode);
 
         return url.getOriginalUrl();
     }
@@ -108,11 +119,10 @@ public class UrlService {
     private UrlResponse mapToResponse(URL url) {
 
         String shortUrl =
-                "http://localhost:8080/" + url.getShortCode();
+                baseUrl + "/" + url.getShortCode();
 
         String qrCodeUrl =
-                "http://localhost:8080/api/qr/"
-                        + url.getShortCode();
+                baseUrl + "/api/qr/" + url.getShortCode();
 
         return new UrlResponse(
                 url.getOriginalUrl(),
@@ -123,5 +133,16 @@ public class UrlService {
                 url.getExpiresAt(),
                 url.getClickCount()
         );
+    }
+
+    public String getShortUrl(String shortCode) {
+
+        if (!urlRepository.existsByShortCode(shortCode)) {
+            throw new ShortUrlNotFoundException(
+                    "Short URL not found"
+            );
+        }
+
+        return baseUrl + "/" + shortCode;
     }
 }

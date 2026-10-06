@@ -25,12 +25,7 @@ public class QRCodeController {
     public ResponseEntity<byte[]> generateQRCode(
             @PathVariable String shortCode) {
 
-        if (!urlService.exists(shortCode)) {
-            return ResponseEntity.notFound().build();
-        }
-
-        String shortUrl =
-                "http://localhost:8080/" + shortCode;
+        String shortUrl = urlService.getShortUrl(shortCode);
 
         try {
 
